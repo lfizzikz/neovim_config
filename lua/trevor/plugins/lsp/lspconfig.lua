@@ -19,6 +19,39 @@ return {
 		vim.api.nvim_create_autocmd("LspAttach", {
 			group = vim.api.nvim_create_augroup("UserLspConfig", {}),
 			callback = function(ev)
+				-- Enable semantic highlighting for Python files
+				local client = vim.lsp.get_client_by_id(ev.data.client_id)
+				if client and client.name == "pyright" then
+					client.server_capabilities.semanticTokensProvider = {
+						full = true,
+						legend = {
+							tokenTypes = {
+								"variable",
+								"function",
+								"class",
+								"method",
+								"property",
+								"enum",
+								"interface",
+								"type",
+								"parameter",
+							},
+							tokenModifiers = {
+								"declaration",
+								"definition",
+								"readonly",
+								"static",
+								"deprecated",
+								"abstract",
+								"async",
+								"modification",
+								"documentation",
+								"defaultLibrary",
+							},
+						},
+					}
+				end
+
 				-- Buffer local mappings.
 				-- See `:help vim.lsp.*` for documentation on any of the below functions
 				local opts = { buffer = ev.buf, silent = true }
@@ -82,17 +115,24 @@ return {
 		})
 		-- Setup pyright with custom configuration
 		lspconfig.pyright.setup({
-			capabilities = cmp_nvim_lsp.default_capabilities(),
+			capabilities = vim.tbl_deep_extend("force", capabilities, {
+				textDocument = {
+					semanticHighlighting = true,
+				},
+			}),
 			settings = {
 				python = {
 					analysis = {
 						autoSearchPaths = true,
 						useLibraryCodeForTypes = true,
 						diagnosticMode = "workspace",
-						typeCheckingMode = "basic",
+						typeCheckingMode = "strict",
 						autoImportCompletions = true,
+						semanticHighlighting = true,
 						diagnosticSeverityOverrides = {
 							reportAttributeAccessIssue = "none",
+							reportUnusedImport = "none",
+							reportUnusedVariable = "warning",
 						},
 					},
 				},
@@ -110,22 +150,11 @@ return {
 				return require("lspconfig.util").root_pattern(unpack(markers))(fname)
 			end,
 			before_init = function(_, config)
-				local root_dir = config.root_dir
-				if not root_dir then
-					return
-				end
+				local venv = vim.g.python3_host_prog
+					or os.getenv("VIRTUAL_ENV") and os.getenv("VIRTUAL_ENV") .. "/bin/python"
 
-				local venv_paths = {
-					root_dir .. "/.venv/bin/python",
-					root_dir .. "/venv/bin/python",
-					root_dir .. "/env/bin/python",
-				}
-
-				for _, venv_path in ipairs(venv_paths) do
-					if vim.fn.executable(venv_path) == 1 then
-						config.settings.python.pythonPath = venv_path
-						break
-					end
+				if venv and vim.fn.executable(venv) == 1 then
+					config.settings.python.pythonPath = venv
 				end
 			end,
 		})
